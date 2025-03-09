@@ -1,3 +1,3 @@
-module github.com/irkaa10/Watchman
+module github.com/Irkaa10/Watchman
 
 go 1.24.0
