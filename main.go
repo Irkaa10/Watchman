@@ -7,39 +7,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Irkaa10/Watchman/config"
+	m "github.com/Irkaa10/Watchman/middleware"
+	"github.com/Irkaa10/Watchman/models"
+
 	"github.com/gorilla/mux"
 )
 
-type Service struct {
-	Name     string
-	URL      string
-	Prefixes []string
-}
-
-type Config struct {
-	Port     string
-	Services []Service
-}
-
-func loadConfig() Config {
-	return Config{
-		Port: "8080",
-		Services: []Service{
-			{
-				Name:     "users-service",
-				URL:      "http://localhost:8081",
-				Prefixes: []string{"/users", "/auth"},
-			},
-			{
-				Name:     "products-service",
-				URL:      "http://localhost:8082",
-				Prefixes: []string{"/products", "/categories"},
-			},
-		},
-	}
-}
-
-func ProxyHandler(service Service) http.HandlerFunc {
+func ProxyHandler(service models.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create a new client for each request to avoid keeping connections alive
 		client := http.Client{
@@ -48,13 +23,16 @@ func ProxyHandler(service Service) http.HandlerFunc {
 
 		backendURL := fmt.Sprintf("%s%s", service.URL, r.URL.Path)
 
+		// Construct the request to be sent
 		proxyReq, err := http.NewRequest(r.Method, backendURL, r.Body)
 		if err != nil {
 			http.Error(w, "Error creating proxy request", http.StatusInternalServerError)
 			log.Printf("Error creating proxy request: %v", err)
+			// TODO: return an error
 			return
 		}
 
+		// Get the incoming request headers and add them to the new req
 		for name, values := range r.Header {
 			for _, value := range values {
 				proxyReq.Header.Add(name, value)
@@ -63,6 +41,7 @@ func ProxyHandler(service Service) http.HandlerFunc {
 
 		proxyReq.Header.Set("X-API-Gateway", "go-gateway")
 
+		// Service response handling
 		resp, err := client.Do(proxyReq)
 		if err != nil {
 			http.Error(w, "Error forwarding request", http.StatusBadGateway)
@@ -96,24 +75,6 @@ func ProxyHandler(service Service) http.HandlerFunc {
 	}
 }
 
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		startTime := time.Now()
-
-		// Call the next handler
-		next.ServeHTTP(w, r)
-
-		// Log after the request is done
-		log.Printf(
-			"Method: %s | Path: %s | Client: %s | Duration: %v",
-			r.Method,
-			r.URL.Path,
-			r.RemoteAddr,
-			time.Since(startTime),
-		)
-	})
-}
-
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	response := map[string]string{
 		"status":    "UP",
@@ -126,11 +87,11 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	config := loadConfig()
+	config := config.LoadConfig()
 
 	router := mux.NewRouter()
 
-	router.Use(LoggingMiddleware)
+	router.Use(m.LoggingMiddleware)
 
 	router.HandleFunc("/health", HealthCheckHandler).Methods("GET")
 
