@@ -91,7 +91,7 @@ func main() {
 
 	router := mux.NewRouter()
 
-	router.Use(m.LoggingMiddleware)
+	router.Use(m.LoggingMiddleware, m.AuthMiddleware)
 
 	router.HandleFunc("/health", HealthCheckHandler).Methods("GET")
 
